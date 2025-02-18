@@ -4,12 +4,9 @@
 // Programmer: Arduino IDE 2.3.4
 
 // Todo:
-//  -fix the oled on/off
-//  -make the oled on/off button disable the other LEDs when held, but then turn back on if the reset button is hit
 //  -add a confirmation dialog box when trying to reset the counter - or remove it when ready to use
 //  -change formatting and style
 //  -design case?
-//  -make oled timeout
 
 #include <ss_oled.h> // https://github.com/bitbank2/ss_oled
 #include <EEPROM.h>
@@ -23,6 +20,7 @@
 #define OLED_ADDR 0x3C
 #define RESET_PIN -1
 #define OLED_TYPE OLED_128x32
+#define READY_SCREEN_TIMEOUT 30000  // 30 seconds in milliseconds
 
 // Button pins
 #define BUTTON_A 4
@@ -32,7 +30,7 @@
 // LED pins
 #define LED_GREEN 9
 #define LED_RED 10
-#define OLED_VCC 16
+#define OLED_VCC 16 // Not necessary anymore because the screen has to be reinitialized each time, but need to power directly if this is disabled.
 
 // EEPROM address for storing count
 #define COUNT_ADDR 0
@@ -61,11 +59,12 @@ unsigned long buttonAPressTime = 0;
 unsigned long buttonBPressTime = 0;
 unsigned long buttonCPressTime = 0;
 unsigned long lastUpdateTime = 0;
+unsigned long lastActivityTime = 0;  // Track when the last activity occurred
 char lastLine1[20] = "";
 char lastLine2[20] = "";
 
 // Time correction factor
-const float TIME_CORRECTION = 0.5; // Multiply durations by 2 to compensate for faster clock
+const float TIME_CORRECTION = 1; // Multiply durations by 2 to compensate for faster clock
 
 void saveCount() {
   EEPROM.put(COUNT_ADDR, restartCount);
@@ -80,14 +79,18 @@ void loadCount() {
 }
 
 void updateDisplay(const char* line1, const char* line2, bool forceUpdate = false) {
+  if (!oledEnabled) {
+    return;  // Skip all updates if display is "off"
+  }
+  
   // Only update if text has changed or force update is requested
   if (forceUpdate || strcmp(line1, lastLine1) != 0 || strcmp(line2, lastLine2) != 0) {
     // Clear lines individually
-    oledWriteString(&oled, 0, 0, 0, "                ", FONT_NORMAL, 0, 1);
-    oledWriteString(&oled, 0, 0, 2, "                ", FONT_NORMAL, 0, 1);
+    oledWriteString(&oled, 0, 0, 0, "                ", FONT_STRETCHED, 0, 1);
+    oledWriteString(&oled, 0, 0, 2, "                ", FONT_STRETCHED, 0, 1);
     // Write new text
-    oledWriteString(&oled, 0, 0, 0, line1, FONT_NORMAL, 0, 1);
-    oledWriteString(&oled, 0, 0, 2, line2, FONT_SMALL, 0, 1);
+    oledWriteString(&oled, 0, 0, 0, line1, FONT_STRETCHED, 0, 1);
+    oledWriteString(&oled, 0, 0, 3, line2, FONT_SMALL, 0, 1);
     // Update last known text
     strcpy(lastLine1, line1);
     strcpy(lastLine2, line2);
@@ -98,6 +101,7 @@ void initDisplay() {
   Wire.begin();
   delay(200);  // Increased delay for more stable initialization
   
+  //digitalWrite(OLED_VCC, HIGH);
   // Initialize OLED
   int rc = oledInit(&oled, OLED_TYPE, OLED_ADDR, FLIPPED, INVERTED, 1, SDA_PIN, SCL_PIN, RESET_PIN, 400000L);
   // Clear display and set contrast
@@ -107,20 +111,34 @@ void initDisplay() {
   delay(200);
   
   // Show splash screen
-  oledWriteString(&oled, 0, 0, 0, "Hello!", FONT_NORMAL, 0, 1);
+  oledWriteString(&oled, 0, 0, 0, "Pitter", FONT_STRETCHED, 0, 1);
+  oledWriteString(&oled, 0, 0, 2, "patter!", FONT_STRETCHED, 0, 1);
   delay(2000);
   
   // Show ready screen
   char countStr[20];
   sprintf(countStr, "Count: %d", restartCount);
-  updateDisplay("Ready to go!", countStr, true);
+  updateDisplay("Ready!", countStr, true);
+
+  updateLastActivity();  // Initialize the activity timer
 }
 
-// Helper function to format time as MM:SS
-void formatTime(unsigned long seconds, char* buffer) {
-  unsigned long minutes = seconds / 60;
-  unsigned long remainingSeconds = seconds % 60;
-  sprintf(buffer, "%lu:%02lu", minutes, remainingSeconds);
+// Helper function to format time as HH:MM:SS
+void formatTime(unsigned long totalSeconds, char* buffer) {
+  unsigned long hours = totalSeconds / 3600;
+  unsigned long minutes = (totalSeconds % 3600) / 60;
+  unsigned long seconds = totalSeconds % 60;
+  sprintf(buffer, "%02lu:%02lu:%02lu", hours, minutes, seconds);
+}
+
+void updateLastActivity() {
+  lastActivityTime = millis();
+  if (!oledEnabled) {  // Turn display back on if it was off
+    oledEnabled = true;
+    char countStr[20];
+    sprintf(countStr, "Count: %d", restartCount);
+    updateDisplay("Ready!", countStr, true);
+  }
 }
 
 void setup() {
@@ -130,8 +148,8 @@ void setup() {
   pinMode(BUTTON_C, INPUT_PULLUP);
   pinMode(LED_GREEN, OUTPUT);
   pinMode(LED_RED, OUTPUT);
-  pinMode(OLED_VCC, OUTPUT);
-  digitalWrite(OLED_VCC, HIGH);
+  pinMode(OLED_VCC, OUTPUT); // Not necessary anymore because the screen has to be reinitialized each time
+  digitalWrite(OLED_VCC, HIGH); // Not necessary anymore because the screen has to be reinitialized each time
 
   // Load saved count
   loadCount();
@@ -152,11 +170,14 @@ void loop() {
     digitalWrite(LED_GREEN, HIGH);
     digitalWrite(LED_RED, LOW);
   }
-  // if (oledEnabled) {
-  //   digitalWrite(OLED_VCC, HIGH);
-  // } else {
-  //   digitalWrite(OLED_VCC, LOW);
-  // }
+
+  // Auto-timeout check for ready screen
+  if (oledEnabled && (currentMillis - lastActivityTime) >= READY_SCREEN_TIMEOUT) {
+    oledEnabled = false;
+    oledFill(&oled, 0, 1);
+    lastLine1[0] = '\0';
+    lastLine2[0] = '\0';
+  }
 
   // Read button states
   bool currentButtonA = !digitalRead(BUTTON_A);
@@ -166,6 +187,7 @@ void loop() {
   // Button A handling with long press detection
   if (currentButtonA) {
     if (!buttonAPressed) {
+      updateLastActivity();
       buttonAPressTime = currentMillis;
       buttonAPressed = true;
     } else if ((currentMillis - buttonAPressTime) >= BUTTON_A_LONG_PRESS_TIME) {
@@ -178,9 +200,9 @@ void loop() {
       
       char countStr[20];
       sprintf(countStr, "Count: %d", restartCount);
-      updateDisplay("Counter Reset!", countStr, true);
+      updateDisplay("Reset!", countStr, true);
       delay(1000);
-      updateDisplay("Ready to go!", countStr, true);
+      updateDisplay("Ready!", countStr, true);
       
       while (!digitalRead(BUTTON_A)) {
         delay(10);
@@ -209,6 +231,7 @@ void loop() {
   // Button B handling with long press for timer end
   if (currentButtonB) {
     if (!buttonBPressed) {
+      updateLastActivity();
       buttonBPressTime = currentMillis;
       buttonBPressed = true;
     } else if ((currentMillis - buttonBPressTime) >= BUTTON_B_LONG_PRESS_TIME && isRunning) {
@@ -221,7 +244,7 @@ void loop() {
       
       char countStr[20];
       sprintf(countStr, "Count: %d", restartCount);
-      updateDisplay("Timer ended!", countStr, true);
+      updateDisplay("Done!", countStr, true);
       delay(1000);
       
       while (!digitalRead(BUTTON_B)) {
@@ -249,15 +272,45 @@ void loop() {
   } else if (buttonCPressed && (currentMillis - buttonCPressTime) >= BUTTON_DEBOUNCE_TIME) {
     buttonCPressed = false;
     oledEnabled = !oledEnabled;
+    lastActivityTime = currentMillis;  // Reset timeout timer
     
-    // Control display visibility using contrast
-    if (oledEnabled) {
-      oledSetContrast(&oled, 127);  // Full contrast
+    if (!oledEnabled) {
+      // Clear the entire display when turning "off"
+      oledFill(&oled, 0, 1);
+      // Clear the last known text so next update will be forced
+      lastLine1[0] = '\0';
+      lastLine2[0] = '\0';
     } else {
-      oledSetContrast(&oled, 0);    // Zero contrast (display appears off)
+      // Force an immediate update when turning back on
+      char countStr[20];
+      sprintf(countStr, "Count: %d", restartCount);
+      if (isRunning) {
+        char timeStr[20];
+        char formattedTime[20];
+        unsigned long elapsed = (millis() - startTime) * TIME_CORRECTION;
+        unsigned long remainingSeconds = ((timerDuration - elapsed + 999) / 1000);
+        formatTime(remainingSeconds, formattedTime);
+        sprintf(timeStr, "%s", formattedTime);
+        updateDisplay(timeStr, countStr, true);
+      } else if (isPaused) {
+        // char timeStr[20];
+        // char formattedTime[20];
+        // unsigned long remainingSeconds = ((timerDuration - pausedTime + 999) / 1000);
+        // formatTime(remainingSeconds, formattedTime);
+        // sprintf(timeStr, "Paused", formattedTime);
+        updateDisplay("Paused", countStr, true);
+      } else {
+        updateDisplay("Ready!", countStr, true);
+      }
     }
   }
 
+  // Remove this section since we want the screen to timeout even during running/paused states:
+  // // Update lastActivityTime when timer state changes
+  // if (isRunning || isPaused) {
+  //   updateLastActivity();
+  // }
+  
   // Update display if needed
   if (currentMillis - lastUpdateTime >= DISPLAY_UPDATE_INTERVAL) {
     char timeStr[20];
@@ -275,14 +328,14 @@ void loop() {
       } else {
         unsigned long remainingSeconds = ((timerDuration - elapsed + 999) / 1000); // Round up
         formatTime(remainingSeconds, formattedTime);
-        sprintf(timeStr, "Time: %s", formattedTime);
+        sprintf(timeStr, "%s", formattedTime);
         updateDisplay(timeStr, countStr);
       }
     } else if (isPaused) {
-      unsigned long remainingSeconds = ((timerDuration - pausedTime + 999) / 1000); // Round up
-      formatTime(remainingSeconds, formattedTime);
-      sprintf(timeStr, "Paused: %s", formattedTime);
-      updateDisplay(timeStr, countStr);
+      // unsigned long remainingSeconds = ((timerDuration - pausedTime + 999) / 1000); // Round up
+      // formatTime(remainingSeconds, formattedTime);
+      // sprintf(timeStr, "Paused: %s", formattedTime);
+      updateDisplay("Paused", countStr);
     }
     
     lastUpdateTime = currentMillis;
