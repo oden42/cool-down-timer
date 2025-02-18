@@ -41,9 +41,9 @@
 SSOLED oled;
 unsigned long startTime = 0;
 unsigned long pausedTime = 0;
-unsigned long timerDuration = 5000; // Initial 5 seconds in milliseconds
-unsigned long baseTimerDuration = 5000; // Must compensate based on TIME_CORRETION
-unsigned long timerDurationIncrement = 10000; // Must compensate based on TIME_CORRETION
+unsigned long timerDuration = 5000; // Initial 60 seconds in milliseconds
+unsigned long baseTimerDuration = 60000; // Initial 60 seconds in milliseconds
+unsigned long timerDurationIncrement = 30000; // Timer increases by this amount each count
 bool isRunning = false;
 bool isPaused = false;
 bool oledEnabled = true;
@@ -81,15 +81,16 @@ void updateDisplay(const char* line1, const char* line2, bool forceUpdate = fals
   
   // Only update if text has changed or force update is requested
   if (forceUpdate || strcmp(line1, lastLine1) != 0 || strcmp(line2, lastLine2) != 0) {
-    // Clear lines individually
-    oledWriteString(&oled, 0, 0, 0, "                ", FONT_STRETCHED, 0, 1);
-    oledWriteString(&oled, 0, 0, 2, "                ", FONT_STRETCHED, 0, 1);
-    // Write new text
-    oledWriteString(&oled, 0, 0, 0, line1, FONT_STRETCHED, 0, 1);
-    oledWriteString(&oled, 0, 0, 3, line2, FONT_SMALL, 0, 1);
-    // Update last known text
-    strcpy(lastLine1, line1);
-    strcpy(lastLine2, line2);
+    // Only clear and update lines that have changed
+    if (forceUpdate || strcmp(line1, lastLine1) != 0) {
+      oledWriteString(&oled, 0, 0, 0, line1, FONT_STRETCHED, 0, 1);
+      strcpy(lastLine1, line1);
+    }
+    
+    if (forceUpdate || strcmp(line2, lastLine2) != 0) {
+      oledWriteString(&oled, 0, 0, 3, line2, FONT_SMALL, 0, 1);
+      strcpy(lastLine2, line2);
+    }
   }
 }
 
