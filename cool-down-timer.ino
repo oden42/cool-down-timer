@@ -79,15 +79,30 @@ void updateDisplay(const char* line1, const char* line2, bool forceUpdate = fals
     return;  // Skip all updates if display is "off"
   }
   
+  // Check if we need a full line clear based on text length changes
+  bool needLine1Clear = strlen(line1) < strlen(lastLine1);
+  bool needLine2Clear = strlen(line2) < strlen(lastLine2);
+  
+  // Special cases that need full line clear
+  if (strstr(lastLine1, "Paused") != NULL && strstr(line1, "Paused") == NULL) {
+    needLine1Clear = true;
+  }
+  
   // Only update if text has changed or force update is requested
   if (forceUpdate || strcmp(line1, lastLine1) != 0 || strcmp(line2, lastLine2) != 0) {
-    // Only clear and update lines that have changed
+    // Clear and update lines as needed
     if (forceUpdate || strcmp(line1, lastLine1) != 0) {
+      if (needLine1Clear) {
+        oledWriteString(&oled, 0, 0, 0, "                ", FONT_STRETCHED, 0, 1);
+      }
       oledWriteString(&oled, 0, 0, 0, line1, FONT_STRETCHED, 0, 1);
       strcpy(lastLine1, line1);
     }
     
     if (forceUpdate || strcmp(line2, lastLine2) != 0) {
+      if (needLine2Clear) {
+        oledWriteString(&oled, 0, 0, 3, "                ", FONT_SMALL, 0, 1);
+      }
       oledWriteString(&oled, 0, 0, 3, line2, FONT_SMALL, 0, 1);
       strcpy(lastLine2, line2);
     }
@@ -110,6 +125,10 @@ void initDisplay() {
   oledWriteString(&oled, 0, 0, 0, "Pitter", FONT_STRETCHED, 0, 1);
   oledWriteString(&oled, 0, 0, 2, "patter!", FONT_STRETCHED, 0, 1);
   delay(2000);
+  
+  // Clear entire display before showing ready screen
+  oledFill(&oled, 0, 1);
+  delay(50);  // Short delay to ensure clear completes
   
   // Show ready screen
   char countStr[20];
