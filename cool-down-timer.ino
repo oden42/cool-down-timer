@@ -11,7 +11,7 @@
 // OLED Display settings
 #define SDA_PIN 2
 #define SCL_PIN 3
-#define FLIPPED 0
+#define FLIPPED 1
 #define INVERTED 0
 #define OLED_ADDR 0x3C
 #define RESET_PIN -1
@@ -19,14 +19,13 @@
 #define READY_SCREEN_TIMEOUT 30000  // 30 seconds in milliseconds
 
 // Button pins
-#define BUTTON_A 4
-#define BUTTON_B 5
-#define BUTTON_C 15
+#define BUTTON_A 8
+#define BUTTON_B 6
+#define BUTTON_C 10
 
 // LED pins
-#define LED_GREEN 9
-#define LED_RED 10
-#define OLED_VCC 16 // Not necessary anymore because the screen has to be reinitialized each time, but need to power directly if this is disabled.
+#define LED_GREEN 16
+#define LED_RED 15
 
 // EEPROM address for storing count
 #define COUNT_ADDR 0
@@ -163,8 +162,6 @@ void setup() {
   pinMode(BUTTON_C, INPUT_PULLUP);
   pinMode(LED_GREEN, OUTPUT);
   pinMode(LED_RED, OUTPUT);
-  pinMode(OLED_VCC, OUTPUT); // Not necessary anymore because the screen has to be reinitialized each time
-  digitalWrite(OLED_VCC, HIGH); // Not necessary anymore because the screen has to be reinitialized each time
 
   // Load saved count
   loadCount();
@@ -289,24 +286,7 @@ void loop() {
       buttonCPressTime = currentMillis;
       buttonCPressed = true;
     } else if ((currentMillis - buttonCPressTime) >= BUTTON_C_LONG_PRESS_TIME) {
-      // Long press: Decrement counter (if > 0)
-      if (restartCount > 0) {
-        restartCount--;
-        saveCount();
-        char countStr[20];
-        sprintf(countStr, "Count: %d", restartCount);
-        updateDisplay("Count -1", countStr, true);
-        delay(1000);
-        updateDisplay("Ready!", countStr, true);
-      }
-      
-      while (!digitalRead(BUTTON_C)) {
-        delay(10);
-      }
-    }
-  } else if (buttonCPressed) {
-    if ((currentMillis - buttonCPressTime) < BUTTON_C_LONG_PRESS_TIME) {
-      // Short press: Reset counter
+      // Long press: Reset counter
       restartCount = 0;
       saveCount();
       timerDuration = baseTimerDuration;
@@ -318,6 +298,24 @@ void loop() {
       updateDisplay("RESET!", countStr, true);
       delay(1000);
       updateDisplay("Ready!", countStr, true);
+      
+      while (!digitalRead(BUTTON_C)) {
+        delay(10);
+      }
+    }
+  } else if (buttonCPressed) {
+    if ((currentMillis - buttonCPressTime) < BUTTON_C_LONG_PRESS_TIME) {
+      // Short press: Decrement counter (if > 0)
+      if (restartCount > 0) {
+        restartCount--;
+        saveCount();
+        char countStr[20];
+        sprintf(countStr, "Count: %d", restartCount);
+        updateDisplay("Count -1", countStr, true);
+        delay(1000);
+        updateDisplay("Ready!", countStr, true);
+      }
+
     }
     buttonCPressed = false;
   }
