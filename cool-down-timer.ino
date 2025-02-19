@@ -32,6 +32,7 @@
 
 // Button timing
 #define BUTTON_A_LONG_PRESS_TIME 2000  // 2 seconds for Button A long press (end timer)
+#define BUTTON_B_LONG_PRESS_TIME 2000  // 2 seconds for LED toggle
 #define BUTTON_C_LONG_PRESS_TIME 2000  // 2 seconds for Button C long press (decrement counter)
 #define DISPLAY_UPDATE_INTERVAL 500     // Update display every 500ms
 #define BUTTON_DEBOUNCE_TIME 50        // 50ms debounce time
@@ -46,6 +47,7 @@ unsigned long timerDurationIncrement = 30000; // Timer increases by this amount 
 bool isRunning = false;
 bool isPaused = false;
 bool oledEnabled = true;
+bool ledsEnabled = true;
 bool buttonAPressed = false;
 bool buttonBPressed = false;
 bool buttonCPressed = false;
@@ -175,11 +177,16 @@ void loop() {
   unsigned long currentMillis = millis();
   
   // Set LED states
-  if (isRunning) {
+  if (ledsEnabled) {
+    if (isRunning) {
+      digitalWrite(LED_GREEN, LOW);
+      digitalWrite(LED_RED, HIGH);
+    } else if (!isPaused) {
+      digitalWrite(LED_GREEN, HIGH);
+      digitalWrite(LED_RED, LOW);
+    }
+  } else {
     digitalWrite(LED_GREEN, LOW);
-    digitalWrite(LED_RED, HIGH);
-  } else if (!isPaused) {
-    digitalWrite(LED_GREEN, HIGH);
     digitalWrite(LED_RED, LOW);
   }
 
@@ -245,36 +252,58 @@ void loop() {
     buttonAPressed = false;
   }
   
-  // Button B handling (Display Toggle)
+  // Button B handling (Display Toggle / LED Toggle)
   if (currentButtonB) {
     if (!buttonBPressed) {
       buttonBPressTime = currentMillis;
       buttonBPressed = true;
+    } else if ((currentMillis - buttonBPressTime) >= BUTTON_B_LONG_PRESS_TIME) {
+      // Long press: Toggle LEDs
+      ledsEnabled = !ledsEnabled;
+      
+      // Force LED states
+      if (!ledsEnabled) {
+        digitalWrite(LED_GREEN, LOW);
+        digitalWrite(LED_RED, LOW);
+      }
+      
+      while (!digitalRead(BUTTON_B)) {
+        delay(10);
+      }
+      buttonBPressed = false;
     }
-  } else if (buttonBPressed && (currentMillis - buttonBPressTime) >= BUTTON_DEBOUNCE_TIME) {
-    buttonBPressed = false;
-    oledEnabled = !oledEnabled;
-    lastActivityTime = currentMillis;  // Reset timeout timer
-    
-    if (!oledEnabled) {
-      oledFill(&oled, 0, 1);
-      lastLine1[0] = '\0';
-      lastLine2[0] = '\0';
-    } else {
-      char countStr[20];
-      sprintf(countStr, "Count: %d", restartCount);
-      if (isRunning) {
-        char timeStr[20];
-        char formattedTime[20];
-        unsigned long elapsed = (millis() - startTime) * TIME_CORRECTION;
-        unsigned long remainingSeconds = ((timerDuration - elapsed + 999) / 1000);
-        formatTime(remainingSeconds, formattedTime);
-        sprintf(timeStr, "%s", formattedTime);
-        updateDisplay(timeStr, countStr, true);
-      } else if (isPaused) {
-        updateDisplay("Paused", countStr, true);
+  } else if (buttonBPressed) {
+    if ((currentMillis - buttonBPressTime) < BUTTON_B_LONG_PRESS_TIME) {
+      // Short press: Toggle display
+      buttonBPressed = false;
+      oledEnabled = !oledEnabled;
+      lastActivityTime = currentMillis;  // Reset timeout timer
+      
+      if (!oledEnabled) {
+        oledFill(&oled, 0, 1);
+        lastLine1[0] = '\0';
+        lastLine2[0] = '\0';
       } else {
-        updateDisplay("Ready!", countStr, true);
+        char countStr[20];
+        sprintf(countStr, "Count: %d", restartCount);
+        if (isRunning) {
+          char timeStr[20];
+          char formattedTime[20];
+          unsigned long elapsed = (millis() - startTime) * TIME_CORRECTION;
+          unsigned long remainingSeconds = ((timerDuration - elapsed + 999) / 1000);
+          formatTime(remainingSeconds, formattedTime);
+          sprintf(timeStr, "%s", formattedTime);
+          updateDisplay(timeStr, countStr, true);
+        } else if (isPaused) {
+          char timeStr[20];
+          char formattedTime[20];
+          unsigned long remainingSeconds = ((timerDuration - pausedTime + 999) / 1000);
+          formatTime(remainingSeconds, formattedTime);
+          sprintf(timeStr, "Paused: %s", formattedTime);
+          updateDisplay(timeStr, countStr, true);
+        } else {
+          updateDisplay("Ready!", countStr, true);
+        }
       }
     }
   }
