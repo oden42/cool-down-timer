@@ -41,9 +41,9 @@
 SSOLED oled;
 unsigned long startTime = 0;
 unsigned long pausedTime = 0;
-unsigned long timerDuration = 5000; // Initial 60 seconds in milliseconds
-unsigned long baseTimerDuration = 60000; // Initial 60 seconds in milliseconds
-unsigned long timerDurationIncrement = 30000; // Timer increases by this amount each count
+unsigned long timerDuration = 5000;
+unsigned long baseTimerDuration = 3600000; // Initial timer in milliseconds (1 hour)
+unsigned long timerDurationIncrement = 30000; // Timer increases by this amount each count (30 seconds)
 bool isRunning = false;
 bool isPaused = false;
 bool oledEnabled = true;
