@@ -217,7 +217,7 @@ void loop() {
       
       char countStr[20];
       sprintf(countStr, "Count: %d", restartCount);
-      updateDisplay("Done!", countStr, true);
+      updateDisplay("SKIPPED", countStr, true);
       delay(1000);
       updateDisplay("Ready!", countStr, true);
       
@@ -362,7 +362,10 @@ void loop() {
       if (elapsed >= timerDuration) {
         isRunning = false;
         timerDuration = baseTimerDuration;
-        updateDisplay("Ready!", countStr);
+        oledEnabled = true;  // Wake up display
+        updateDisplay("Done!", countStr, true);  // Force update with Done message
+        delay(1000);
+        updateDisplay("Ready!", countStr, true);
       } else {
         unsigned long remainingSeconds = ((timerDuration - elapsed + 999) / 1000);
         formatTime(remainingSeconds, formattedTime);
